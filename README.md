@@ -1,6 +1,6 @@
 # mtls-server
 
-Minimal Go HTTPS server accepting only verified mTLS clients. Clients send AES-256-GCM encrypted payloads over TLS 1.3; server decrypts, re-encrypts with a fresh nonce, and returns the ciphertext.
+Minimal Go HTTPS server accepting only verified mTLS clients. Clients send plaintext bytes inside TLS 1.3; server encrypts those bytes with AES-256-GCM and returns an encrypted envelope.
 
 No plaintext endpoint. No embedded keys. No third-party dependencies. Standard library only.
 
@@ -70,22 +70,24 @@ The server logs startup address to stderr as structured JSON via `log/slog`. Sen
 
 ## API
 
+### `GET /v1/health`
+
+**Response (200 OK):**
+
+```json
+{"status":"ok"}
+```
+
+Requires valid mTLS client certificate. No additional auth.
+
 ### `POST /v1/echo`
 
 **Request:**
 
-```json
-{
-  "nonce": "<padded-base64>",
-  "ciphertext": "<padded-base64>"
-}
-```
-
-- `nonce`: Must decode to exactly 12 bytes (AES-GCM nonce size).
-- `ciphertext`: Must decode to at least 16 bytes (GCM overhead). Authenticated payload.
-- `Content-Type`: `application/json`.
-- Maximum encoded body: 65,536 bytes (64 KiB).
-- Duplicate and unknown JSON fields are rejected.
+- Raw plaintext bytes in request body.
+- `Content-Type`: `application/octet-stream`.
+- Maximum body: 65,536 bytes (64 KiB).
+- Plaintext is protected by TLS in transit, then encrypted by server for response.
 
 **Response (200 OK):**
 
@@ -96,19 +98,19 @@ The server logs startup address to stderr as structured JSON via `log/slog`. Sen
 }
 ```
 
-- Contains the same plaintext re-encrypted with a fresh `crypto/rand` nonce.
-- The server never echoes the request nonce or request ciphertext.
+- Contains request body bytes encrypted with a fresh `crypto/rand` nonce.
+- Response envelope fields use padded standard base64.
 
 **Error Statuses:**
 
 | Status | Body `error` | When |
 |---|---|---|
-| 400 | `invalid request` | Malformed JSON, wrong base64, wrong nonce/ciphertext size, auth failure, trailing data |
-| 404 | `not found` | Path other than `/v1/echo` |
-| 405 | `method not allowed` | Method other than POST |
+| 400 | `invalid request` | Body read failure |
+| 404 | `not found` | Unknown path |
+| 405 | `method not allowed` | Wrong method |
 | 413 | `request too large` | Body exceeds 64 KiB |
-| 415 | `unsupported media type` | Content-Type not `application/json` |
-| 500 | `internal server error` | Unexpected server failure |
+| 415 | `unsupported media type` | Content-Type not `application/octet-stream` |
+| 500 | `internal server error` | Encryption failure |
 
 All error bodies are generic JSON: `{"error":"<message>"}`. The server never leaks plaintext, keys, nonces, ciphertext, or internal error details.
 

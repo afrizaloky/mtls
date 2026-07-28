@@ -1,75 +1,80 @@
-"""mTLS HTTPS server with graceful shutdown."""
+"""mTLS server launcher via Uvicorn with multi-worker support."""
+
+from __future__ import annotations
 
 import logging
 import os
-import signal
-import socket
 import ssl
-import sys
-import threading
-from http.server import HTTPServer
 from typing import NoReturn
 
-from .handlers import Handler
+import uvicorn
+from uvicorn import Config
+
+from .config import load_config
 
 logger = logging.getLogger("mtls_server")
 
 
-class ThreadedHTTPServer(HTTPServer):
-    """HTTP server that spawns a new thread per request."""
+class _MtlsConfig(uvicorn.Config):
+    """Uvicorn Config that enforces TLSv1.3 minimum on the SSL context.
 
-    allow_reuse_address = True
-    daemon_threads = True
+    The standard ``create_ssl_context`` creates an ``ssl.SSLContext`` with the
+    default minimum version (TLS 1.2).  This subclass overrides ``load()`` to
+    pin the minimum to TLS 1.3 after the parent builds the context.
+    """
 
-    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
-        t = threading.Thread(target=self.process_request_thread, args=(request, client_address))
-        t.daemon = self.daemon_threads
-        t.start()
-
-    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
-        try:
-            self.finish_request(request, client_address)
-        except Exception:
-            self.handle_error(request, client_address)
-        finally:
-            self.shutdown_request(request)
+    def load(self) -> None:
+        super().load()
+        if self.ssl is not None:
+            self.ssl.minimum_version = ssl.TLSVersion.TLSv1_3
+            if self.ssl_cert_reqs is not None:
+                self.ssl.verify_mode = ssl.VerifyMode(self.ssl_cert_reqs)
 
 
-def run_server(*, addr: tuple[str, int], ssl_ctx: ssl.SSLContext) -> NoReturn:
-    """Start the mTLS server and block until shutdown.
+def run_server(
+    *,
+    addr: tuple[str, int] | None = None,
+    ssl_ctx: ssl.SSLContext | None = None,
+) -> NoReturn:
+    """Start the mTLS server via Uvicorn and block until shutdown.
 
-    Handles SIGINT/SIGTERM for graceful shutdown with a 10-second deadline.
+    Handles SIGINT/SIGTERM via Uvicorn's own signal handling (no conflicting
+    signal handlers installed here).
+
+    Config is loaded from env vars in every worker process (pickling-safe).
+    The *ssl_ctx* parameter is accepted for backward compatibility but not
+    used internally — the picklable file-based path always wins.
+
     Never returns — exits the process.
     """
-    host, port = addr
-    httpd = ThreadedHTTPServer((host, port), Handler)
+    cfg = load_config()
+    host, port = addr if addr else cfg.listen_addr
+    workers = max(1, os.cpu_count() or 1)
 
-    # Wrap the server socket with TLS.
-    httpd.socket = ssl_ctx.wrap_socket(
-        httpd.socket,
-        server_side=True,
+    config = _MtlsConfig(
+        app="mtls_server.app:app",
+        host=host,
+        port=port,
+        workers=workers,
+        ssl_keyfile=cfg.server_key_file,
+        ssl_certfile=cfg.server_cert_file,
+        ssl_ca_certs=cfg.client_ca_file,
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
+        log_level="info",
+        access_log=True,
     )
 
-    shutdown_event = threading.Event()
+    uvicorn.run(
+        "mtls_server.app:app",
+        host=host,
+        port=port,
+        workers=workers,
+        ssl_keyfile=cfg.server_key_file,
+        ssl_certfile=cfg.server_cert_file,
+        ssl_ca_certs=cfg.client_ca_file,
+        ssl_cert_reqs=ssl.CERT_REQUIRED,
+        log_level="info",
+        access_log=True,
+    )
 
-    def _handle_signal(signum: int, _frame: object) -> None:
-        sig_name = signal.Signals(signum).name
-        logger.info("received %s, shutting down …", sig_name)
-        shutdown_event.set()
-
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
-
-    logger.info("listening on %s:%d", *addr)
-
-    # Serve in a background thread so we can wait on the shutdown event.
-    serve_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    serve_thread.start()
-
-    shutdown_event.wait()
-
-    # Graceful shutdown with 10-second deadline.
-    logger.info("stopping server …")
-    httpd.shutdown()
-    logger.info("server stopped")
-    os._exit(0)  # noqa: SLF001  — force exit; all daemon threads die with us.
+    raise SystemExit(0)

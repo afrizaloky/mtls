@@ -3,6 +3,18 @@ name = "mtls-server"
 version = "0.1.0"
 description = "Minimal Python mTLS server with health endpoint"
 requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=42.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 target-version = "py311"

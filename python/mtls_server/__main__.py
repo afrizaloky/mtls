@@ -1,7 +1,6 @@
 """CLI entry point for python -m mtls_server."""
 
 import logging
-import signal
 import sys
 
 from .config import load_config

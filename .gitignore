@@ -1,1 +1,11 @@
 .omo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local development artifacts
+*.log
+dev-certs/

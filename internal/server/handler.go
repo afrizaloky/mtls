@@ -1,6 +1,9 @@
 package server
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"mime"
@@ -85,6 +88,34 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	key := make([]byte, 32)
+	nonce := make([]byte, 12)
+	plaintext := make([]byte, 256)
+	if _, err := rand.Read(key); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if _, err := rand.Read(nonce); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if _, err := rand.Read(plaintext); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	_ = gcm.Seal(nil, nonce, plaintext, nil)
+
 	writeHealth(w)
 }
 

@@ -9,3 +9,6 @@ venv/
 # Local development artifacts
 *.log
 dev-certs/
+
+# Java
+java/target/

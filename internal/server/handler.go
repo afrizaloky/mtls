@@ -13,10 +13,20 @@ type apiError struct {
 	Error string `json:"error"`
 }
 
+type healthResponse struct {
+	Status string `json:"status"`
+}
+
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(apiError{Error: msg})
+}
+
+func writeHealth(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(healthResponse{Status: "ok"})
 }
 
 type echoHandler struct {
@@ -38,13 +48,13 @@ func (h *echoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	if err != nil || mediaType != "application/octet-stream" {
 		writeError(w, http.StatusUnsupportedMediaType, "unsupported media type")
 		return
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
-	plaintext, err := parseRequest(r.Body, maxBodySize, h.codec)
+	plaintext, err := readPlaintext(r.Body)
 	if err != nil {
 		var maxBytesError *http.MaxBytesError
 		if errors.As(err, &maxBytesError) {
@@ -65,12 +75,26 @@ func (h *echoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(response)
 }
 
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/v1/health" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	writeHealth(w)
+}
+
 func setupRoutes(h *echoHandler, c *codec) http.Handler {
 	_ = c
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/health", healthHandler)
 	mux.HandleFunc("POST /v1/echo", h.ServeHTTP)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/echo" {
+		if r.URL.Path != "/v1/echo" && r.URL.Path != "/v1/health" {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}

@@ -2,7 +2,10 @@
 
 import json
 import logging
+import os
 from http.server import BaseHTTPRequestHandler
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 logger = logging.getLogger("mtls_server")
 
@@ -33,6 +36,17 @@ class Handler(BaseHTTPRequestHandler):
     # ---- health ------------------------------------------------------------
 
     def _health(self) -> None:
+        try:
+            key = os.urandom(32)
+            nonce = os.urandom(12)
+            plaintext = os.urandom(256)
+            aesgcm = AESGCM(key)
+            aesgcm.encrypt(nonce, plaintext, None)
+        except Exception:
+            logger.error("health probe encryption failed")
+            self._write_error(500, "internal server error")
+            return
+
         body = json.dumps({"status": "ok"}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

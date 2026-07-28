@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  mTLS HTTPS load test for POST /v1/echo.
+
+  Required runtime properties:
+    -Jhost=localhost -Jport=8443
+    -Jkeystore=/path/to/client.p12 -Jkeystore_password=...
+    -Jtruststore=/path/to/server-ca.p12 -Jtruststore_password=...
+    -Jrequest_body='{"nonce":"<base64 nonce>","ciphertext":"<base64 ciphertext>"}'
+
+  Optional properties:
+    -Jpath=/v1/echo -Jthreads=10 -Jramp_up=10 -Jduration=60
+    -Jthroughput_per_minute=600
+
+  request_body must contain a valid envelope encrypted with server static key.
+  No certificate, key, password, or ciphertext material is stored in this plan.
+-->
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="mTLS HTTPS Echo Load Test" enabled="true">
+      <stringProp name="TestPlan.comments">POST ${__P(path,/v1/echo)} over HTTPS with TLS 1.3 and verified client certificate. Supply -Jhost, -Jport, -Jkeystore, -Jkeystore_password, -Jtruststore, -Jtruststore_password, and -Jrequest_body.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Runtime properties" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="host" elementType="Argument"><stringProp name="Argument.name">host</stringProp><stringProp name="Argument.value">${__P(host,localhost)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="port" elementType="Argument"><stringProp name="Argument.name">port</stringProp><stringProp name="Argument.value">${__P(port,8443)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="path" elementType="Argument"><stringProp name="Argument.name">path</stringProp><stringProp name="Argument.value">${__P(path,/v1/echo)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="request_body" elementType="Argument"><stringProp name="Argument.name">request_body</stringProp><stringProp name="Argument.value"><![CDATA[${__P(request_body,{"nonce":"...","ciphertext":"..."})}]]></stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="keystore" elementType="Argument"><stringProp name="Argument.name">keystore</stringProp><stringProp name="Argument.value">${__P(keystore,client.p12)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="keystore_password" elementType="Argument"><stringProp name="Argument.name">keystore_password</stringProp><stringProp name="Argument.value">${__P(keystore_password,)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="truststore" elementType="Argument"><stringProp name="Argument.name">truststore</stringProp><stringProp name="Argument.value">${__P(truststore,)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="truststore_password" elementType="Argument"><stringProp name="Argument.name">truststore_password</stringProp><stringProp name="Argument.value">${__P(truststore_password,)}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+        </collectionProp>
+      </elementProp>
+      <stringProp name="TestPlan.user_define_classpath"></stringProp>
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTPS defaults (TLS 1.3)" enabled="true">
+        <stringProp name="HTTPSampler.domain">${host}</stringProp>
+        <stringProp name="HTTPSampler.port">${port}</stringProp>
+        <stringProp name="HTTPSampler.protocol">https</stringProp>
+        <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">10000</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+      <Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="HTTPS client certificate properties" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="javax.net.ssl.keyStore" elementType="Argument"><stringProp name="Argument.name">javax.net.ssl.keyStore</stringProp><stringProp name="Argument.value">${keystore}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="javax.net.ssl.keyStorePassword" elementType="Argument"><stringProp name="Argument.name">javax.net.ssl.keyStorePassword</stringProp><stringProp name="Argument.value">${keystore_password}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="javax.net.ssl.trustStore" elementType="Argument"><stringProp name="Argument.name">javax.net.ssl.trustStore</stringProp><stringProp name="Argument.value">${truststore}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="javax.net.ssl.trustStorePassword" elementType="Argument"><stringProp name="Argument.name">javax.net.ssl.trustStorePassword</stringProp><stringProp name="Argument.value">${truststore_password}</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+          <elementProp name="https.protocols" elementType="Argument"><stringProp name="Argument.name">https.protocols</stringProp><stringProp name="Argument.value">TLSv1.3</stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp>
+        </collectionProp>
+      </Arguments>
+      <hashTree/>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Echo clients (${__P(threads,10)} threads)" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController"><boolProp name="LoopController.continue_forever">true</boolProp><stringProp name="LoopController.loops">-1</stringProp></elementProp>
+        <stringProp name="ThreadGroup.num_threads">${__P(threads,10)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(ramp_up,10)}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,60)}</stringProp>
+        <stringProp name="ThreadGroup.delay"></stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /v1/echo" enabled="true">
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <stringProp name="HTTPSampler.path">${path}</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.concurrentPool">false</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments"><collectionProp name="Arguments.arguments"><elementProp name="body" elementType="HTTPArgument"><boolProp name="HTTPArgument.always_encode">false</boolProp><stringProp name="Argument.value"><![CDATA[${request_body}]]></stringProp><stringProp name="Argument.metadata">=</stringProp></elementProp></collectionProp></elementProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON content type" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="Content-Type" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp></collectionProp></HeaderManager>
+          <hashTree/>
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="">200</stringProp></collectionProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><intProp name="Assertion.test_type">8</intProp><stringProp name="Assertion.custom_message"></stringProp><boolProp name="Assertion.assume_success">false</boolProp></ResponseAssertion>
+          <hashTree/>
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="JSON response fields" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="">&quot;nonce&quot;\s*:</stringProp><stringProp name="">&quot;ciphertext&quot;\s*:</stringProp></collectionProp><stringProp name="Assertion.test_field">Assertion.response_data</stringProp><intProp name="Assertion.test_type">2</intProp><stringProp name="Assertion.custom_message">Response must contain nonce and ciphertext JSON fields</stringProp><boolProp name="Assertion.assume_success">false</boolProp></ResponseAssertion>
+          <hashTree/>
+        </hashTree>
+        <ConstantThroughputTimer guiclass="TestPlanGui" testclass="ConstantThroughputTimer" testname="Constant throughput" enabled="true"><doubleProp><name>throughput</name><value>${__P(throughput_per_minute,600)}</value></doubleProp><intProp name="calcMode">1</intProp></ConstantThroughputTimer>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>
